@@ -6,6 +6,7 @@ import (
   "github.com/nullboundary/glfont"
 	"github.com/vova616/chipmunk"
 	"github.com/vova616/chipmunk/vect"
+  mgl "github.com/go-gl/mathgl/mgl32"
   "strings"
   "bufio"
 	"log"
@@ -29,76 +30,15 @@ var (
   Inf = vect.Float(math.Inf(1))
   count int
   font *glfont.Font
-  program uint32
-  vertexArrayID uint32
-  vertexBuffer uint32
-  vertexBufferData []float32
+
+  vertAttrib uint32
 )
 
-  const ballVertexShader = `
-#version 150
-
-in vec2 position;
-
-void main()
-{
-  gl_Position = vec4(position, 0.0, 1.0);
-}
-`
-  const ballFragmentShader = `
-#version 150
-
-out vec4 outColor;
-
-void main()
-{
-  outColor = vec4(1.0, 1.0, 1.0, 1.0);
-}
-`
+const windowHeight = 800
+const windowWidth = 1200
 
 // drawCircle draws a circle for the specified radius, rotation angle, and the specified number of sides
 func drawCircle(radius float64, sides int32, x float32, y float32) {
-  vertexBufferData = nil
-  for a := 0.0; a < 2*math.Pi; a += (2 * math.Pi / float64(sides)) {
-    vertexBufferData = append(vertexBufferData, float32(math.Sin(a)*radius) + x)
-    vertexBufferData = append(vertexBufferData, float32(math.Cos(a)*radius) + y)
-    vertexBufferData = append(vertexBufferData, 0)
-  }
-
-  gl.BindVertexArray(vertexArrayID)
-  gl.BindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
-  gl.BufferData(gl.ARRAY_BUFFER, len(vertexBufferData)*4, gl.Ptr(vertexBufferData), gl.STATIC_DRAW)
-  gl.EnableVertexAttribArray(0)
-  gl.UseProgram(program)
-  gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, nil)
-  gl.DrawArrays(gl.LINE_LOOP, 0, sides)
-  gl.DisableVertexAttribArray(0)
-}
-
-// OpenGL draw function
-func draw(){
-    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-	//for i := range staticLines {
-	//	x := staticLines[i].GetAsSegment().A.X
-	//	y := staticLines[i].GetAsSegment().A.Y
-	//	gl.Vertex3f(float32(x), float32(y), 0)
-	//	x = staticLines[i].GetAsSegment().B.X
-	//	y = staticLines[i].GetAsSegment().B.Y
-	//	gl.Vertex3f(float32(x), float32(y), 0)
-	//}
-
-	// draw balls
-	for _, ball := range balls {
-		pos := ball.Body.Position()
-		//rot := ball.Body.Angle() * chipmunk.DegreeConst
-		//gl.Translatef(float32(pos.X), float32(pos.Y), 0.0)
-		//gl.Rotatef(float32(rot), 0, 0, 1)
-    csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
-		drawCircle(float64(csA.Radius/400.0), 30, float32((pos.X*2 - 800.0)/800.0), float32((pos.Y*2 - 800.0)/800.0))
-	}
-
-  font.Printf(100, 100, 0.3, "Count: %v", count) //x,y,scale,string,printf args
 }
 
 func addBall() {
@@ -110,7 +50,7 @@ func addBall() {
   ball.SetFriction(0.9)
 
 	body := chipmunk.NewBody(vect.Float(mass), ball.Moment(float32(mass)))
-	body.SetPosition(vect.Vect{vect.Float(x), 800.0})
+	body.SetPosition(vect.Vect{vect.Float(x), windowHeight})
 	body.SetAngle(vect.Float(rand.Float32() * 2 * math.Pi))
 
 	body.AddShape(ball)
@@ -127,7 +67,7 @@ func addBigBall() {
   ball.SetFriction(0.9)
 
 	body := chipmunk.NewBody(vect.Float(mass), ball.Moment(mass))
-	body.SetPosition(vect.Vect{vect.Float(x), 800})
+	body.SetPosition(vect.Vect{vect.Float(x), windowHeight})
 	body.SetAngle(vect.Float(rand.Float32() * 2 * math.Pi))
   body.SetAngularVelocity(float32((rand.Float32()*2 - 1) * 50))
 
@@ -155,22 +95,9 @@ func step(dt float32) {
 func createBodies() {
 	space = chipmunk.NewSpace()
 	space.Gravity = vect.Vect{0, -900}
-  space.Iterations = 50
-
+  space.Iterations = 16
 }
 
-// onResize sets up a simple 2d ortho context based on the window size
-func onResize(window *glfw.Window, w, h int) {
-	w, h = window.GetSize() // query window to get screen pixels
-	width, height := window.GetFramebufferSize()
-	gl.Viewport(0, 0, int32(width), int32(height))
-	gl.MatrixMode(gl.PROJECTION)
-	gl.LoadIdentity()
-	gl.Ortho(0, float64(w), 0, float64(h), -1, 1)
-	gl.MatrixMode(gl.MODELVIEW)
-	gl.LoadIdentity()
-	gl.ClearColor(1, 1, 1, 1)
-}
 
 func main() {
 	runtime.LockOSThread()
@@ -188,65 +115,72 @@ func main() {
   glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
   glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
-	window, err := glfw.CreateWindow(800, 800, os.Args[0], nil, nil)
+	window, err := glfw.CreateWindow(windowWidth, windowHeight, os.Args[0], nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	window.SetFramebufferSizeCallback(onResize)
 	window.MakeContextCurrent()
 
 	if err := gl.Init(); err != nil {
 		log.Fatal(err)
 	}
 
-	// set up opengl context
-	onResize(window, 800, 800)
-
 	// set up physics
 	createBodies()
 
-	runtime.LockOSThread()
-	glfw.SwapInterval(1)
+
+  program, err := newProgram("vertexShader.vertexshader", "fragmentShader.fragmentshader")
+  if err != nil {
+    panic(err)
+  }
+  gl.UseProgram(program)
+
+  model := mgl.Ident4()
+  modelUniform := gl.GetUniformLocation(program, gl.Str("model\x00"))
+  gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+
+  vertexBufferData := []float32{}
+  sides := int32(60)
+  for a := 0.0; a <= 2*math.Pi; a += (2 * math.Pi / float64(sides)) {
+    vertexBufferData = append(vertexBufferData, float32(math.Sin(a)))
+    vertexBufferData = append(vertexBufferData, float32(math.Cos(a)))
+    vertexBufferData = append(vertexBufferData, 0)
+  }
+  vertexBufferData = append(vertexBufferData, float32(math.Sin(0)))
+  vertexBufferData = append(vertexBufferData, float32(math.Cos(0)))
+  vertexBufferData = append(vertexBufferData, 0)
+  vertexBufferData = append(vertexBufferData, []float32{0.0, 0.0, 0.0}...)
+
+  // Configure the vertex data
+  var vao uint32
+  gl.GenVertexArrays(1, &vao)
+  gl.BindVertexArray(vao)
+
+  var vbo uint32
+  gl.GenBuffers(1, &vbo)
+  gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+  gl.BufferData(gl.ARRAY_BUFFER, len(vertexBufferData)*4, gl.Ptr(vertexBufferData), gl.STATIC_DRAW)
+
+  vertAttrib := uint32(gl.GetAttribLocation(program, gl.Str("vert\x00")))
+  gl.EnableVertexAttribArray(vertAttrib)
+  gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+
+  // Configure global settings
+  gl.Enable(gl.DEPTH_TEST)
+  gl.DepthFunc(gl.LESS)
+  gl.ClearColor(1.0, 1.0, 1.0, 1.0)
+  //gl.Viewport(0,0, windowWidth, windowHeight)
 
   frame := 0
   bigBall := 0
   bump := 0
   count = 0
 
-  font, err = glfont.LoadFont("roboto/Roboto-Light.ttf", int32(52), 800, 800)
+  font, err = glfont.LoadFont("roboto/Roboto-Light.ttf", int32(52), windowWidth, windowHeight)
   if err != nil {
     log.Panicf("LoadFont: %v", err)
   }
   font.SetColor(0.0, 0.0, 0.0, 1.0) //r,g,b,a font color
-
-  gl.Enable(gl.DEPTH_TEST)
-  gl.DepthFunc(gl.LESS)
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-  gl.ClearColor(1.0, 1.0, 1.0, 1.0)
-  gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-  //vertexBufferData = []float32{
-  //  -1.0, -1.0, 0.0,
-  //  1.0, -1.0, 0.0,
-  //  0.0,  1.0, 0.0,
-  //}
-  //vertexBufferData = []float32
-
-  // Create Vertex array object
-  gl.GenVertexArrays(1, &vertexArrayID)
-  gl.BindVertexArray(vertexArrayID)
-
-  gl.GenBuffers(1, &vertexBuffer)
-  //gl.BindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
-  //gl.BufferData(gl.ARRAY_BUFFER, len(vertexBufferData)*4, gl.Ptr(vertexBufferData), gl.STATIC_DRAW)
-
-  program, err = newProgram("vertexShader.vertexshader", "fragmentShader.fragmentshader")
-  if err != nil {
-    log.Fatal(err)
-  }
-
-  gl.ClearColor(1.0, 1.0, 1.0, 1.0)
 
 	for !window.ShouldClose() {
     frame++
@@ -258,7 +192,18 @@ func main() {
 		addBall()
 		addBall()
 		addBall()
-		draw()
+    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    gl.UseProgram(program)
+    for _, ball := range balls {
+      pos := ball.Body.Position()
+      _ = pos
+      csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
+      rot := ball.Body.Angle()
+      model = mgl.Ortho2D(0, windowWidth, windowHeight, 0).Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
+      gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+      gl.BindVertexArray(vao)
+      gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
+    }
 
     if frame == 60 {
       count = len(space.Bodies)
@@ -300,6 +245,8 @@ func main() {
     } else if bump == 320 {
       bump = 60
     }
+    font.Printf(10, 100, 0.3, "Count: %v", count) //x,y,scale,string,printf args
+
 		window.SwapBuffers()
 		glfw.PollEvents()
 
@@ -349,13 +296,13 @@ func loadShaders(vertexFilePath, fragmentFilePath string) (uint32, uint32, error
   // Compile vertex shader
   vertexShaderID, err := compileShader(readShaderCode(vertexFilePath), gl.VERTEX_SHADER)
   if err != nil {
-    return 0, 0, nil
+    return 0, 0, err
   }
 
   // Compile fragment shader
   fragmentShaderID, err := compileShader(readShaderCode(fragmentFilePath), gl.FRAGMENT_SHADER)
   if err != nil {
-    return 0, 0, nil
+    return 0, 0, err
   }
 
   return vertexShaderID, fragmentShaderID, nil
