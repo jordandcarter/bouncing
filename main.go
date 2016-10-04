@@ -15,6 +15,7 @@ import (
 	"os"
   "fmt"
 	"runtime"
+  "time"
 )
 
 var (
@@ -32,10 +33,38 @@ var (
   font *glfont.Font
 
   vertAttrib uint32
+  renderDuration averageDuration
+  simulationDuration averageDuration
+  loopDuration averageDuration
 )
 
 const windowHeight = 800
 const windowWidth = 1200
+
+type averageDuration struct {
+  frames [60]int64
+  current int64
+  head int
+  average float32
+}
+
+func (d *averageDuration) start() {
+  d.current = time.Now().UnixNano()
+}
+
+func (d *averageDuration) stop() {
+  d.frames[d.head] = time.Now().UnixNano() - d.current
+  d.head = (d.head+1) % 60
+}
+
+func (d *averageDuration) milliseconds() float32 {
+  total := int64(0)
+  for _, frame := range d.frames {
+    total += frame
+  }
+  d.average = float32(total) / 60000.0
+  return d.average
+}
 
 // drawCircle draws a circle for the specified radius, rotation angle, and the specified number of sides
 func drawCircle(radius float64, sides int32, x float32, y float32) {
@@ -187,37 +216,59 @@ func main() {
   }
   font.SetColor(0.0, 0.0, 0.0, 1.0) //r,g,b,a font color
 
+  renderDuration = averageDuration{}
+  simulationDuration = averageDuration{}
+  loopDuration = averageDuration{}
+
 	for !window.ShouldClose() {
+    loopDuration.start()
     frame++
     bigBall++
     bump++
+
+    simulationDuration.start()
 		addBall()
 		addBall()
+		step(1.0 / 240.0)
+    simulationDuration.stop()
+
+    renderDuration.start()
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-    gl.LineWidth(float32(0.001))
+    gl.LineWidth(float32(0.7))
     gl.UseProgram(program)
+    gl.BindVertexArray(vao)
     for _, ball := range balls {
       pos := ball.Body.Position()
-      _ = pos
       csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
       rot := ball.Body.Angle()
       model = mgl.Ortho2D(0, windowWidth, windowHeight, 0).Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
       gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
-      gl.BindVertexArray(vao)
       gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
     }
+    font.Printf(10, 70, 0.3, "Loop: %vms", loopDuration.average / 1000.0) //x,y,scale,string,printf args
+    font.Printf(10, 85, 0.3, "Fps: %3.1f", 1.0 / (loopDuration.average / 1000000.0)) //x,y,scale,string,printf args
+    font.Printf(10, 100, 0.3, "Count: %v balls", count) //x,y,scale,string,printf args
+    font.Printf(10, 115, 0.3, "Render: %.2fms", renderDuration.average / 1000.0) //x,y,scale,string,printf args
+    font.Printf(10, 130, 0.3, "Render/ball: %.2fus", renderDuration.average / float32(count)) //x,y,scale,string,printf args
+    font.Printf(10, 145, 0.3, "Simulation: %.2fms", simulationDuration.average / 1000.0) //x,y,scale,string,printf args
+    font.Printf(10, 160, 0.3, "Simulation/ball: %.2fus", simulationDuration.average / float32(count)) //x,y,scale,string,printf args
+
+		window.SwapBuffers()
+    renderDuration.stop()
+		glfw.PollEvents()
 
     if frame == 60 {
       count = len(space.Bodies)
       fmt.Printf("Count: %v\n", count)
+      renderDuration.milliseconds()
+      simulationDuration.milliseconds()
+      loopDuration.milliseconds()
       frame = 0
     }
     if bigBall == 60*4 {
       addBigBall()
       bigBall = 0
     }
-
-		step(1.0 / 240.0)
 
     if bump == 60 {
       staticBody := chipmunk.NewBody(Inf, Inf)
@@ -247,11 +298,7 @@ func main() {
     } else if bump == 320 {
       bump = 60
     }
-    font.Printf(10, 100, 0.3, "Count: %v", count) //x,y,scale,string,printf args
-
-		window.SwapBuffers()
-		glfw.PollEvents()
-
+    loopDuration.stop()
 	}
 }
 
