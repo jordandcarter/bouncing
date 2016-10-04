@@ -165,9 +165,11 @@ func main() {
   }
   gl.UseProgram(program)
 
-  model := mgl.Ident4()
-  modelUniform := gl.GetUniformLocation(program, gl.Str("model\x00"))
-  gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+  mvp := mgl.Ident4()
+  mvpUniform := gl.GetUniformLocation(program, gl.Str("mvp\x00"))
+  gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
+
+  vp := mgl.Ortho2D(0, windowWidth, windowHeight, 0)
 
   vertexBufferData := []float32{}
   sides := int32(60)
@@ -189,11 +191,10 @@ func main() {
   var vbo uint32
   gl.GenBuffers(1, &vbo)
   gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-  gl.BufferData(gl.ARRAY_BUFFER, len(vertexBufferData)*4, gl.Ptr(vertexBufferData), gl.STATIC_DRAW)
+  gl.BufferData(gl.ARRAY_BUFFER, len(vertexBufferData)*4, gl.Ptr(vertexBufferData), gl.DYNAMIC_DRAW)
 
-  vertAttrib := uint32(gl.GetAttribLocation(program, gl.Str("vert\x00")))
-  gl.EnableVertexAttribArray(vertAttrib)
-  gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+  gl.EnableVertexAttribArray(0)
+  gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
   // Configure global settings
   gl.Enable(gl.DEPTH_TEST)
@@ -241,8 +242,8 @@ func main() {
       pos := ball.Body.Position()
       csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
       rot := ball.Body.Angle()
-      model = mgl.Ortho2D(0, windowWidth, windowHeight, 0).Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
-      gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+      mvp = vp.Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
+      gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
       gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
     }
     font.Printf(10, 70, 0.3, "Loop: %vms", loopDuration.average / 1000.0) //x,y,scale,string,printf args
