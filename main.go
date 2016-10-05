@@ -16,6 +16,7 @@ import (
   "fmt"
 	"runtime"
   "time"
+  "sync"
 )
 
 var (
@@ -37,10 +38,18 @@ var (
   simulationDuration averageDuration
   loopDuration averageDuration
   fontDuration averageDuration
+  ballMvpDuration averageDuration
+  vp mgl.Mat4
+  negativeZ mgl.Vec3
 )
 
 const windowHeight = 800
 const windowWidth = 1200
+
+type ballWrapper struct {
+  ball *chipmunk.Shape
+  index int
+}
 
 type averageDuration struct {
   frames [60]int64
@@ -170,7 +179,7 @@ func main() {
   mvpUniform := gl.GetUniformLocation(program, gl.Str("mvp\x00"))
   gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
 
-  vp := mgl.Ortho2D(0, windowWidth, windowHeight, 0)
+  vp = mgl.Ortho2D(0, windowWidth, windowHeight, 0)
 
   vertexBufferData := []float32{}
   sides := int32(60)
@@ -232,6 +241,8 @@ func main() {
   bump := 0
   count = 0
 
+  negativeZ = mgl.Vec3{0,0,-1}
+
   font, err = glfont.LoadFont("roboto/Roboto-Light.ttf", int32(52), windowWidth, windowHeight)
   if err != nil {
     log.Panicf("LoadFont: %v", err)
@@ -242,7 +253,8 @@ func main() {
   fontDuration = averageDuration{}
   simulationDuration = averageDuration{}
   loopDuration = averageDuration{}
-  positions := [4000]mgl.Mat4{}
+  ballMvpDuration = averageDuration{}
+  positions := [8000]mgl.Mat4{}
 
 	for !window.ShouldClose() {
     loopDuration.start()
@@ -257,15 +269,10 @@ func main() {
     simulationDuration.stop()
 
     renderDuration.start()
-    for i, ball := range balls {
-      pos := ball.Body.Position()
-      csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
-      rot := ball.Body.Angle()
-      mvp = vp.Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
-      positions[i] = mvp
-      //gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
-      //gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
-    }
+    ballMvpDuration.start()
+    updateMvps(&positions)
+    ballMvpDuration.stop()
+
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     gl.LineWidth(float32(0.7))
     gl.UseProgram(program)
@@ -284,10 +291,8 @@ func main() {
     font.Printf(10, 145, 0.3, "Simulation: %.2fms", simulationDuration.average / 1000.0) //x,y,scale,string,printf args
     font.Printf(10, 160, 0.3, "Simulation/ball: %.2fus", simulationDuration.average / float32(count)) //x,y,scale,string,printf args
     font.Printf(10, 175, 0.3, "Font Render: %.2fms", fontDuration.average / 1000.0) //x,y,scale,string,printf args
+    font.Printf(10, 190, 0.3, "Ball Mvps: %.2fms", ballMvpDuration.average / 1000.0) //x,y,scale,string,printf args
     fontDuration.stop()
-
-		window.SwapBuffers()
-		glfw.PollEvents()
 
     if frame == 60 {
       count = len(space.Bodies)
@@ -296,6 +301,7 @@ func main() {
       simulationDuration.milliseconds()
       loopDuration.milliseconds()
       fontDuration.milliseconds()
+      ballMvpDuration.milliseconds()
       frame = 0
     }
     if bigBall == 60*4 {
@@ -332,7 +338,44 @@ func main() {
       bump = 60
     }
     loopDuration.stop()
+
+		window.SwapBuffers()
+		glfw.PollEvents()
 	}
+}
+
+func updateMvps(positions *[8000]mgl.Mat4) {
+  var wg sync.WaitGroup
+  third := len(balls) / 3
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    for i := 0; i < third; i++ {
+      //renderBalls <- ballWrapper{ball: ball, index: i}
+      positions[i] = calculateMvp(balls[i])
+    }
+  }()
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    for i := third; i < third*2; i++ {
+      //renderBalls <- ballWrapper{ball: ball, index: i}
+      positions[i] = calculateMvp(balls[i])
+    }
+  }()
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    for i := third*2; i < len(balls); i++ {
+      //renderBalls <- ballWrapper{ball: ball, index: i}
+      positions[i] = calculateMvp(balls[i])
+    }
+  }()
+  wg.Wait()
+}
+
+func calculateMvp(ball *chipmunk.Shape) (mgl.Mat4) {
+  return vp.Mul4(mgl.Translate3D(float32(ball.Body.Position().X), windowHeight-float32(ball.Body.Position().Y), 0).Mul4(mgl.HomogRotate3D(float32(ball.Body.Angle()), negativeZ).Mul4(mgl.Scale3D(float32(ball.ShapeClass.(*chipmunk.CircleShape).Radius), float32(ball.ShapeClass.(*chipmunk.CircleShape).Radius), 0))))
 }
 
 func newProgram(vertexFilePath, fragmentFilePath string) (uint32, error) {
