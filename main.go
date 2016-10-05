@@ -196,6 +196,26 @@ func main() {
   gl.EnableVertexAttribArray(0)
   gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
+  var position_vbo uint32
+  gl.GenBuffers(1, &position_vbo)
+  gl.BindBuffer(gl.ARRAY_BUFFER, position_vbo)
+
+  gl.EnableVertexAttribArray(1); //tell the location
+  gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 16, gl.PtrOffset(0)) //tell other data
+  gl.VertexAttribDivisor(1, 1); //is it instanced?
+
+  gl.EnableVertexAttribArray(2); //tell the location
+  gl.VertexAttribPointer(2, 4, gl.FLOAT, false, 16, gl.PtrOffset(16)) //tell other data
+  gl.VertexAttribDivisor(2, 1); //is it instanced?
+
+  gl.EnableVertexAttribArray(3); //tell the location
+  gl.VertexAttribPointer(3, 4, gl.FLOAT, false, 16, gl.PtrOffset(32)) //tell other data
+  gl.VertexAttribDivisor(3, 1); //is it instanced?
+
+  gl.EnableVertexAttribArray(4); //tell the location
+  gl.VertexAttribPointer(4, 4, gl.FLOAT, false, 16, gl.PtrOffset(48)) //tell other data
+  gl.VertexAttribDivisor(4, 1); //is it instanced?
+
   // Configure global settings
   gl.Enable(gl.DEPTH_TEST)
   gl.Enable(gl.LINE_SMOOTH)
@@ -220,6 +240,7 @@ func main() {
   renderDuration = averageDuration{}
   simulationDuration = averageDuration{}
   loopDuration = averageDuration{}
+  positions := [4000]mgl.Mat4{}
 
 	for !window.ShouldClose() {
     loopDuration.start()
@@ -234,18 +255,24 @@ func main() {
     simulationDuration.stop()
 
     renderDuration.start()
-    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-    gl.LineWidth(float32(0.7))
-    gl.UseProgram(program)
-    gl.BindVertexArray(vao)
-    for _, ball := range balls {
+    for i, ball := range balls {
       pos := ball.Body.Position()
       csA, _ := ball.ShapeClass.(*chipmunk.CircleShape)
       rot := ball.Body.Angle()
       mvp = vp.Mul4(mgl.Translate3D(float32(pos.X), windowHeight-float32(pos.Y), 0).Mul4(mgl.HomogRotate3D(float32(rot), mgl.Vec3{0,0,-1}).Mul4(mgl.Scale3D(float32(csA.Radius), float32(csA.Radius), 0))))
-      gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
-      gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
+      positions[i] = mvp
+      //gl.UniformMatrix4fv(mvpUniform, 1, false, &mvp[0])
+      //gl.DrawArrays(gl.LINE_LOOP, 0, sides + 6)
     }
+    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    gl.LineWidth(float32(0.7))
+    gl.UseProgram(program)
+    gl.BindVertexArray(vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, position_vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, len(balls)*16, gl.Ptr(&positions[0][0]), gl.DYNAMIC_DRAW)
+    gl.DrawElementsInstanced(gl.LINE_LOOP, int32(0), gl.UNSIGNED_INT, gl.Ptr(&positions[0][0]), int32(len(balls)))
+    renderDuration.stop()
+
     font.Printf(10, 70, 0.3, "Loop: %vms", loopDuration.average / 1000.0) //x,y,scale,string,printf args
     font.Printf(10, 85, 0.3, "Fps: %3.1f", 1.0 / (loopDuration.average / 1000000.0)) //x,y,scale,string,printf args
     font.Printf(10, 100, 0.3, "Count: %v balls", count) //x,y,scale,string,printf args
@@ -255,7 +282,6 @@ func main() {
     font.Printf(10, 160, 0.3, "Simulation/ball: %.2fus", simulationDuration.average / float32(count)) //x,y,scale,string,printf args
 
 		window.SwapBuffers()
-    renderDuration.stop()
 		glfw.PollEvents()
 
     if frame == 60 {
