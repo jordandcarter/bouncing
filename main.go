@@ -36,6 +36,7 @@ var (
   renderDuration averageDuration
   simulationDuration averageDuration
   loopDuration averageDuration
+  fontDuration averageDuration
 )
 
 const windowHeight = 800
@@ -201,19 +202,19 @@ func main() {
   gl.BindBuffer(gl.ARRAY_BUFFER, position_vbo)
 
   gl.EnableVertexAttribArray(1); //tell the location
-  gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 16, gl.PtrOffset(0)) //tell other data
+  gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 64, gl.PtrOffset(0)) //tell other data
   gl.VertexAttribDivisor(1, 1); //is it instanced?
 
   gl.EnableVertexAttribArray(2); //tell the location
-  gl.VertexAttribPointer(2, 4, gl.FLOAT, false, 16, gl.PtrOffset(16)) //tell other data
+  gl.VertexAttribPointer(2, 4, gl.FLOAT, false, 64, gl.PtrOffset(16)) //tell other data
   gl.VertexAttribDivisor(2, 1); //is it instanced?
 
   gl.EnableVertexAttribArray(3); //tell the location
-  gl.VertexAttribPointer(3, 4, gl.FLOAT, false, 16, gl.PtrOffset(32)) //tell other data
+  gl.VertexAttribPointer(3, 4, gl.FLOAT, false, 64, gl.PtrOffset(32)) //tell other data
   gl.VertexAttribDivisor(3, 1); //is it instanced?
 
   gl.EnableVertexAttribArray(4); //tell the location
-  gl.VertexAttribPointer(4, 4, gl.FLOAT, false, 16, gl.PtrOffset(48)) //tell other data
+  gl.VertexAttribPointer(4, 4, gl.FLOAT, false, 64, gl.PtrOffset(48)) //tell other data
   gl.VertexAttribDivisor(4, 1); //is it instanced?
 
   // Configure global settings
@@ -238,6 +239,7 @@ func main() {
   font.SetColor(0.0, 0.0, 0.0, 1.0) //r,g,b,a font color
 
   renderDuration = averageDuration{}
+  fontDuration = averageDuration{}
   simulationDuration = averageDuration{}
   loopDuration = averageDuration{}
   positions := [4000]mgl.Mat4{}
@@ -269,10 +271,11 @@ func main() {
     gl.UseProgram(program)
     gl.BindVertexArray(vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, position_vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, len(balls)*16, gl.Ptr(&positions[0][0]), gl.DYNAMIC_DRAW)
-    gl.DrawElementsInstanced(gl.LINE_LOOP, int32(0), gl.UNSIGNED_INT, gl.Ptr(&positions[0][0]), int32(len(balls)))
+    gl.BufferData(gl.ARRAY_BUFFER, len(balls)*64, gl.Ptr(&positions[0][0]), gl.DYNAMIC_DRAW)
+    gl.DrawArraysInstanced(gl.LINE_LOOP, 0, sides+6, int32(len(balls)))
     renderDuration.stop()
 
+    fontDuration.start()
     font.Printf(10, 70, 0.3, "Loop: %vms", loopDuration.average / 1000.0) //x,y,scale,string,printf args
     font.Printf(10, 85, 0.3, "Fps: %3.1f", 1.0 / (loopDuration.average / 1000000.0)) //x,y,scale,string,printf args
     font.Printf(10, 100, 0.3, "Count: %v balls", count) //x,y,scale,string,printf args
@@ -280,6 +283,8 @@ func main() {
     font.Printf(10, 130, 0.3, "Render/ball: %.2fus", renderDuration.average / float32(count)) //x,y,scale,string,printf args
     font.Printf(10, 145, 0.3, "Simulation: %.2fms", simulationDuration.average / 1000.0) //x,y,scale,string,printf args
     font.Printf(10, 160, 0.3, "Simulation/ball: %.2fus", simulationDuration.average / float32(count)) //x,y,scale,string,printf args
+    font.Printf(10, 175, 0.3, "Font Render: %.2fms", fontDuration.average / 1000.0) //x,y,scale,string,printf args
+    fontDuration.stop()
 
 		window.SwapBuffers()
 		glfw.PollEvents()
@@ -290,6 +295,7 @@ func main() {
       renderDuration.milliseconds()
       simulationDuration.milliseconds()
       loopDuration.milliseconds()
+      fontDuration.milliseconds()
       frame = 0
     }
     if bigBall == 60*4 {
